@@ -1,0 +1,680 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <title>That Earth · 那个地球 — 一颗地球的三种时间</title>
+  <meta name="description" content="That Earth（那个地球）是一个在浏览器中重建地球的长期项目：从公开数据源的现实地球，到 AI 模型驱动的预测地球，再到可以被追问的数字孪生地球。" />
+  <meta name="theme-color" content="#02060b" id="themeColor" />
+  <meta property="og:title" content="That Earth · 那个地球" />
+  <meta property="og:description" content="同一颗行星，三种观看它的时间：现实 · 预测 · 智能。" />
+  <meta property="og:type" content="website" />
+  <meta property="og:url" content="https://that.earth/" />
+  <meta property="og:locale" content="zh_CN" id="ogLocale" />
+  <meta property="og:image" content="https://that.earth/og.jpg" />
+  <meta property="og:image:width" content="1200" />
+  <meta property="og:image:height" content="630" />
+  <meta name="twitter:card" content="summary_large_image" />
+  <meta name="twitter:title" content="That Earth · 那个地球" />
+  <meta name="twitter:description" content="同一颗行星，三种观看它的时间：现实 · 预测 · 智能。" />
+  <meta name="twitter:image" content="https://that.earth/og.jpg" />
+  <link rel="canonical" href="https://that.earth/" />
+  <script>
+    (function () {
+      var stored = null;
+      try { stored = localStorage.getItem("that-earth-theme"); } catch (error) {}
+      var system = window.matchMedia && window.matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark";
+      var theme = stored === "light" || stored === "dark" ? stored : system;
+      document.documentElement.dataset.theme = theme;
+      document.documentElement.dataset.themeSource = stored === "light" || stored === "dark" ? "manual" : "system";
+      var meta = document.getElementById("themeColor");
+      if (meta) meta.setAttribute("content", theme === "light" ? "#edf4f1" : "#02060b");
+
+      var langStored = null;
+      try { langStored = localStorage.getItem("that-earth-lang"); } catch (error) {}
+      var sysLang = (navigator.languages && navigator.languages[0]) || navigator.language || "en";
+      var lang = langStored === "zh" || langStored === "en" ? langStored : String(sysLang).toLowerCase().indexOf("zh") === 0 ? "zh" : "en";
+      document.documentElement.lang = lang === "zh" ? "zh-CN" : "en";
+      document.documentElement.dataset.lang = lang;
+      document.documentElement.dataset.langSource = langStored === "zh" || langStored === "en" ? "manual" : "system";
+      if (lang === "en") document.title = "That Earth — One Planet, Three Kinds of Time";
+    })();
+  </script>
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+  <link rel="preload" href="/fonts/space-grotesk-latin.woff2" as="font" type="font/woff2" crossorigin />
+  <link rel="preload" href="/textures/earth_day_2048.jpg" as="image" crossorigin media="(max-width: 900px)" />
+  <link rel="preload" href="/textures/earth_day_4096.jpg" as="image" crossorigin media="(min-width: 901px)" />
+  <link rel="preload" href="/textures/clouds_2048.jpg" as="image" crossorigin />
+  <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "WebSite",
+      "name": "That Earth",
+      "alternateName": "那个地球",
+      "url": "https://that.earth/",
+      "description": "一个在浏览器中重建地球的长期项目：现实地球、预测地球与智能地球。"
+    }
+  </script>
+</head>
+<body class="is-loading">
+  <canvas id="world" aria-hidden="true"></canvas>
+  <div class="space-scrim" aria-hidden="true"></div>
+  <div class="vignette" aria-hidden="true"></div>
+  <div class="grain" aria-hidden="true"></div>
+
+  <div class="loader" id="loader" role="status" aria-live="polite">
+    <div class="loader-inner">
+      <div class="loader-top">
+        <span class="loader-mark">TE</span>
+        <span class="loader-orbit">ORBIT SYNC / 地月系统</span>
+      </div>
+      <div class="loader-wordmark">THAT EARTH</div>
+      <div class="loader-bar"><i id="loaderBar"></i></div>
+      <div class="loader-meta">
+        <span id="loaderStatus">正在接入地球影像</span>
+        <span id="loaderPct">000</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="scroll-progress" aria-hidden="true"><i id="scrollBar"></i></div>
+
+  <header class="site-header" id="siteHeader">
+    <a class="brand" href="#hero" aria-label="That Earth 首页">
+      <span class="brand-mark">TE</span>
+      <span class="brand-text">THAT EARTH<small>那个地球</small></span>
+    </a>
+    <nav class="site-nav" aria-label="主导航">
+      <a href="#phase-1" data-nav="phase-1"><span>01</span>现实</a>
+      <a href="#phase-2" data-nav="phase-2"><span>02</span>预测</a>
+      <a href="#phase-3" data-nav="phase-3"><span>03</span>智能</a>
+      <a href="#outro" data-nav="outro" class="nav-project">项目 <i>↗</i></a>
+    </nav>
+    <div class="header-status" aria-hidden="true">
+      <i></i>
+      <span id="headerPhase">PHASE 01 / BUILDING</span>
+    </div>
+    <button class="lang-toggle" id="langToggle" type="button" aria-label="Switch language" title="Switch language">
+      <span id="langToggleLabel">EN</span>
+    </button>
+    <button class="theme-toggle" id="themeToggle" type="button" aria-label="切换到明亮模式" title="切换到明亮模式">
+      <svg class="icon-sun" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round">
+        <circle cx="12" cy="12" r="3.75" />
+        <path d="M12 2v2.5M12 19.5V22M2 12h2.5M19.5 12H22M4.8 4.8l1.8 1.8M17.4 17.4l1.8 1.8M19.2 4.8l-1.8 1.8M6.6 17.4l-1.8 1.8" />
+      </svg>
+      <svg class="icon-moon" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M20 14.2A8.2 8.2 0 0 1 9.8 4a8.2 8.2 0 1 0 10.2 10.2Z" />
+      </svg>
+    </button>
+  </header>
+
+  <aside class="rail" aria-hidden="true">
+    <div class="rail-head">MISSION<br />TIMELINE</div>
+    <div class="rail-track">
+      <i class="rail-fill" id="railFill"></i>
+      <span class="rail-node" data-rail="hero"></span>
+      <span class="rail-node" data-rail="phase-1"></span>
+      <span class="rail-node" data-rail="phase-2"></span>
+      <span class="rail-node" data-rail="phase-3"></span>
+    </div>
+    <div class="rail-labels">
+      <span data-rail-label="phase-1">01 现实</span>
+      <span data-rail-label="phase-2">02 预测</span>
+      <span data-rail-label="phase-3">03 智能</span>
+    </div>
+    <div class="rail-count"><b id="railPct">00</b><span>%</span></div>
+    <button class="autoplay" id="autoplay" type="button" aria-label="播放自动浏览" aria-pressed="false" title="播放自动浏览">
+      <span class="autoplay-icon" aria-hidden="true"></span>
+      <span class="autoplay-label" id="autoplayLabel">PLAY</span>
+    </button>
+  </aside>
+
+  <aside class="hud" aria-hidden="true">
+    <div class="hud-line"><span>VIEW</span><b id="hudCoord">--°N · --°E</b></div>
+    <div class="hud-line"><span>ALT</span><b id="hudAlt">-- KM</b></div>
+    <div class="hud-line"><span>LAYER</span><b id="hudLayer">SURFACE</b></div>
+    <div class="hud-line"><span>UTC</span><b id="hudTime">--:--:--</b></div>
+    <div class="hud-live"><i></i> SIMULATION ONLINE</div>
+  </aside>
+
+  <div class="scroll-meter" aria-hidden="true">
+    <span>SCROLL</span>
+    <div><i id="scrollMeterFill"></i></div>
+    <b id="scrollPct">00</b>
+  </div>
+
+  <main id="main">
+    <!-- ================= HERO ================= -->
+    <section class="hero" id="hero" data-scene="hero">
+      <div class="hero-grid">
+        <div class="hero-eyebrow" data-reveal>
+          <span class="live-dot"></span>
+          <span>THAT EARTH</span>
+          <span class="rule"></span>
+          <span>一个关于地球的长期项目</span>
+        </div>
+        <div class="hero-coords" data-reveal style="--d:120ms">
+          <span>SYSTEM / SOL-03</span>
+          <span>23.4° AXIAL TILT</span>
+          <span>2026 — ∞</span>
+        </div>
+
+        <div class="hero-main">
+          <h1 class="hero-title" data-reveal style="--d:180ms">
+            <span class="hero-line">THAT</span>
+            <span class="hero-line hero-line-earth">EARTH<i>.</i></span>
+          </h1>
+          <div class="hero-aside" data-reveal style="--d:320ms">
+            <p class="hero-zh">那 个 地 球</p>
+            <p class="hero-lede">同一颗行星，<br />三种观看它的时间。</p>
+            <p class="hero-note">REALITY <i>/</i> FORECAST <i>/</i> INTELLIGENCE</p>
+          </div>
+        </div>
+
+        <div class="hero-foot">
+          <p class="hero-intro" data-reveal style="--d:420ms">
+            不是重新发明一颗地球，<br />
+            而是把公开的数据、运行中的模型与人工智能，<br />
+            放回它本来的位置。
+          </p>
+          <a class="scroll-cue" href="#manifesto" data-reveal style="--d:520ms">
+            <span class="cue-ring"><i></i></span>
+            <span>向下滚动，进入轨道<small>SCROLL TO ENTER ORBIT</small></span>
+          </a>
+        </div>
+      </div>
+      <div class="hero-orbit-caption" aria-hidden="true">
+        <span>HELIOCENTRIC VIEW</span>
+        <i></i>
+        <span>8 PLANETS · 1 HOME</span>
+      </div>
+    </section>
+
+    <!-- ================= MANIFESTO ================= -->
+    <section class="manifesto section" id="manifesto" data-scene="manifesto">
+      <div class="section-shell manifesto-shell">
+        <div class="manifesto-head">
+          <p class="eyebrow" data-reveal><span>00</span> MANIFESTO / 宣言</p>
+          <p class="manifesto-side" data-reveal style="--d:80ms">一颗行星<br />三种时间尺度<br />一次持续的建造</p>
+        </div>
+
+        <div class="manifesto-title-wrap">
+          <h2 class="manifesto-title" data-reveal>
+            一颗地球，<br />
+            <em>三种时间。</em>
+          </h2>
+          <p class="manifesto-copy" data-reveal style="--d:160ms">
+            我们习惯把地球当作一张不会改变的地图。事实上，它每一秒都在变化：
+            风在走，海在流，板块在缓慢呼吸。That Earth 想做的，是把这些变化
+            重新放回一颗可以被旋转、放大、剥离的地球上。
+          </p>
+        </div>
+
+        <ol class="time-list">
+          <li data-reveal>
+            <span class="time-num">01</span>
+            <span class="time-cn">现实</span>
+            <span class="time-en">PRESENT EARTH</span>
+            <p>公开数据构成的此刻。观测、再分析、卫星与浮标。</p>
+          </li>
+          <li data-reveal style="--d:100ms">
+            <span class="time-num">02</span>
+            <span class="time-cn">预测</span>
+            <span class="time-en">FORECAST EARTH</span>
+            <p>AI 气象与海洋模型写下的明天。从单层到四维。</p>
+          </li>
+          <li data-reveal style="--d:200ms">
+            <span class="time-num">03</span>
+            <span class="time-cn">智能</span>
+            <span class="time-en">REASONING EARTH</span>
+            <p>拥有记忆、因果与预演能力的数字孪生。</p>
+          </li>
+        </ol>
+
+        <p class="manifesto-foot" data-reveal>
+          <span>THE PROJECT IS CURRENTLY IN PHASE 01</span>
+          <span>项目目前处于第一阶段 · 本页是一条仍在延伸的轨道</span>
+        </p>
+      </div>
+    </section>
+
+    <!-- ================= PHASE 01 ================= -->
+    <section class="phase-cover phase-1 section" id="phase-1" data-scene="phase-1">
+      <div class="ghost-index" aria-hidden="true">01</div>
+      <div class="section-shell phase-cover-shell">
+        <div class="phase-copy">
+          <div class="phase-kicker" data-reveal>
+            <span class="phase-pill">PHASE 01</span>
+            <span class="status-pill"><i></i> 进行中 / BUILDING</span>
+          </div>
+          <h2 class="phase-title" data-reveal style="--d:80ms">
+            <span class="cn">现实地球</span>
+            <span class="en">PRESENT EARTH</span>
+          </h2>
+          <p class="phase-lead" data-reveal style="--d:160ms">把观测到的地球，<br />放回它原本的位置。</p>
+          <p class="phase-body" data-reveal style="--d:240ms">
+            以公开、可追溯的数据源为原料，在浏览器里重建一颗可以被旋转、缩放、
+            逐层剥离的地球。同一时刻，只呈现一个气压层或一个水深层——
+            克制，是为了看清；剥离，是为了理解它由什么构成。
+          </p>
+          <ul class="phase-tags" data-reveal style="--d:320ms">
+            <li>大气</li><li>海洋</li><li>地质</li><li>生物地球化学</li>
+          </ul>
+          <div class="phase-meta" data-reveal style="--d:400ms">
+            <div><span>STATUS</span><b>01 / 03</b></div>
+            <div><span>ENGINE</span><b>WEBGL · GLSL</b></div>
+            <div><span>DATA</span><b>OPEN SOURCE</b></div>
+          </div>
+        </div>
+        <div class="phase-visual-note" aria-hidden="true">
+          <span>REALITY LAYER</span>
+          <i></i>
+          <span>OBSERVED · REANALYZED</span>
+        </div>
+      </div>
+      <div class="section-index" aria-hidden="true">01 <i>/</i> REALITY</div>
+    </section>
+
+    <!-- ================= VARIABLES ================= -->
+    <section class="variables section" id="variables" data-scene="variables">
+      <div class="variables-sticky">
+        <div class="variables-head">
+          <div>
+            <p class="eyebrow"><span>01.1</span> DATA VARIABLES &amp; SOURCES</p>
+            <h3>每一层，都来自真实。</h3>
+          </div>
+          <div class="layer-counter" aria-hidden="true"><b id="varIndex">01</b><span>/ 04</span></div>
+        </div>
+
+        <div class="variables-stage">
+          <div class="var-copy">
+            <article class="var-card is-active" data-var="0">
+              <div class="var-top"><span class="var-num">01</span><span class="var-kind">ATMOSPHERE</span><span class="var-layer">ATM-01</span></div>
+              <h4>大气<span>·</span>风与压力的剖面</h4>
+              <p>从 1000 hPa 到 10 hPa，一次只展开一层气压面。风、温度、湿度与位势高度在同一条时间线上流动。</p>
+              <div class="chips">
+                <span>风场 U / V</span><span>温度</span><span>相对湿度</span><span>位势高度</span><span>海平面气压</span>
+              </div>
+              <dl class="source-list">
+                <div><dt>DATA</dt><dd>ERA5 · GFS · MERRA-2</dd></div>
+                <div><dt>SOURCE</dt><dd>ECMWF / C3S · NOAA NCEP · NASA GMAO</dd></div>
+                <div><dt>LAYER</dt><dd>单个气压层 · 可剥离壳层</dd></div>
+              </dl>
+            </article>
+
+            <article class="var-card" data-var="1">
+              <div class="var-top"><span class="var-num">02</span><span class="var-kind">OCEAN</span><span class="var-layer">OCN-02</span></div>
+              <h4>海洋<span>·</span>深蓝色的动力学</h4>
+              <p>选择 0 至 2000 米中的一个水深层，读取流速、温度、盐度与海面高度。洋流不是背景，是地球的第二套气候系统。</p>
+              <div class="chips">
+                <span>海流 U / V</span><span>海温</span><span>盐度</span><span>有效波高</span><span>海面高度异常</span>
+              </div>
+              <dl class="source-list">
+                <div><dt>DATA</dt><dd>GLORYS12V1 · HYCOM · WAVEWATCH III</dd></div>
+                <div><dt>SOURCE</dt><dd>Copernicus Marine · NOAA · HYCOM Consortium</dd></div>
+                <div><dt>LAYER</dt><dd>单层水深层 · 粒子尾迹流场</dd></div>
+              </dl>
+            </article>
+
+            <article class="var-card" data-var="2">
+              <div class="var-top"><span class="var-num">03</span><span class="var-kind">LITHOSPHERE</span><span class="var-layer">GEO-03</span></div>
+              <h4>地质<span>·</span>缓慢的呼吸</h4>
+              <p>陆地高程与海底地形拼接成一颗完整的固体地球。板块边界、地震与火山，让“静止”的大地重新有了时间。</p>
+              <div class="chips">
+                <span>陆地高程</span><span>海底地形</span><span>板块边界</span><span>地震分布</span><span>重力异常</span>
+              </div>
+              <dl class="source-list">
+                <div><dt>DATA</dt><dd>GEBCO · SRTM · USGS</dd></div>
+                <div><dt>SOURCE</dt><dd>GEBCO / Nippon Foundation · NASA · USGS</dd></div>
+                <div><dt>LAYER</dt><dd>地形晕渲 · 等深线壳层</dd></div>
+              </dl>
+            </article>
+
+            <article class="var-card" data-var="3">
+              <div class="var-top"><span class="var-num">04</span><span class="var-kind">BIOGEOCHEMISTRY</span><span class="var-layer">BIO-04</span></div>
+              <h4>生物地球化学<span>·</span>生命的浓度</h4>
+              <p>叶绿素、气溶胶、初级生产力与碳通量。它们看不见风，却记录着海洋与大气之间最漫长的交换。</p>
+              <div class="chips">
+                <span>叶绿素 a</span><span>初级生产力</span><span>气溶胶光学厚度</span><span>CO₂ 通量</span>
+              </div>
+              <dl class="source-list">
+                <div><dt>DATA</dt><dd>MODIS / VIIRS · CAMS · SOCAT</dd></div>
+                <div><dt>SOURCE</dt><dd>NASA Ocean Color · Copernicus CAMS · SOCAT</dd></div>
+                <div><dt>LAYER</dt><dd>粒子点云 · 浓度场壳层</dd></div>
+              </dl>
+            </article>
+
+            <div class="var-progress" aria-hidden="true">
+              <span class="is-on"></span><span></span><span></span><span></span>
+              <em>滚动以剥离数据层</em>
+            </div>
+          </div>
+
+          <div class="var-layer-hud" aria-hidden="true">
+            <div class="layer-hud-top">
+              <span>ACTIVE LAYER</span>
+              <b id="layerHudName">ATMOSPHERE</b>
+            </div>
+            <div class="layer-hud-line"><i></i><span>PEEL AWAY TO INSPECT</span></div>
+            <div class="layer-hud-coord"><span>LAT</span><b id="layerHudLat">23.5°N</b><span>ALT</span><b id="layerHudAlt">12 KM</b></div>
+          </div>
+        </div>
+
+        <div class="variables-foot" aria-hidden="true">
+          <span>ONE LAYER AT A TIME</span>
+          <i></i>
+          <span>SCROLL THROUGH 04 LAYERS</span>
+        </div>
+      </div>
+    </section>
+
+    <!-- ================= EFFECTS ================= -->
+    <section class="effects section" id="effects" data-scene="effects">
+      <div class="section-shell">
+        <div class="effects-head">
+          <p class="eyebrow" data-reveal><span>01.2</span> MOTION &amp; PHENOMENA</p>
+          <h3 data-reveal style="--d:80ms">让数据，<br />开始运动。</h3>
+          <p class="effects-intro" data-reveal style="--d:160ms">
+            静态的场只能被读取，运动的场可以被感受。第一阶段将逐步加入
+            风、流、浪与放电——它们不是装饰，而是数据本身的形状。
+          </p>
+          <div class="effects-status" data-reveal style="--d:240ms">
+            <span><i></i> PROTOTYPING</span>
+            <span>GPU PARTICLE SYSTEM</span>
+          </div>
+        </div>
+
+        <div class="effect-grid">
+          <article class="effect-card" data-reveal>
+            <div class="effect-visual wind-visual">
+              <svg viewBox="0 0 260 120" preserveAspectRatio="none" aria-hidden="true">
+                <defs>
+                  <linearGradient id="windGrad" x1="0" x2="1">
+                    <stop offset="0" stop-color="#77f2d3" stop-opacity="0" />
+                    <stop offset=".5" stop-color="#77f2d3" stop-opacity=".95" />
+                    <stop offset="1" stop-color="#9ff7ff" stop-opacity="0" />
+                  </linearGradient>
+                </defs>
+                <path class="flow f1" d="M-30 34 C 30 12, 76 60, 130 34 S 232 12, 292 40" />
+                <path class="flow f2" d="M-20 62 C 46 40, 86 84, 142 58 S 228 40, 296 74" />
+                <path class="flow f3" d="M-40 90 C 34 70, 80 108, 138 82 S 240 62, 300 96" />
+              </svg>
+              <span class="visual-tag">U / V · STREAMLINE</span>
+            </div>
+            <div class="effect-copy">
+              <div><span class="effect-num">A</span><h4>风速流线</h4><span class="en">WIND STREAMLINES</span></div>
+              <p>GPU 粒子沿风场积分，用速度着色，用拖尾留下路径。极地的东西风带会自己显露出来。</p>
+            </div>
+          </article>
+
+          <article class="effect-card" data-reveal style="--d:100ms">
+            <div class="effect-visual ocean-visual">
+              <svg viewBox="0 0 260 120" aria-hidden="true">
+                <defs>
+                  <linearGradient id="oceanGrad" x1="0" x2="1">
+                    <stop offset="0" stop-color="#5ad8e6" stop-opacity="0" />
+                    <stop offset=".5" stop-color="#5ad8e6" stop-opacity=".9" />
+                    <stop offset="1" stop-color="#4a9dff" stop-opacity="0" />
+                  </linearGradient>
+                </defs>
+                <path class="current c1" d="M-20 28 C 40 58, 92 4, 150 42 S 240 70, 290 36" />
+                <path class="current c2" d="M-10 62 C 50 90, 96 32, 158 68 S 244 88, 300 58" />
+                <path class="current c3" d="M-30 92 C 38 112, 92 68, 152 98 S 234 104, 286 84" />
+                <circle class="trail-dot d1" cx="60" cy="42" r="2.5" />
+                <circle class="trail-dot d2" cx="126" cy="29" r="2" />
+                <circle class="trail-dot d3" cx="186" cy="52" r="2.5" />
+                <circle class="trail-dot d4" cx="92" cy="74" r="1.6" />
+                <circle class="trail-dot d5" cx="216" cy="72" r="2" />
+              </svg>
+              <span class="visual-tag">CURRENT · PARTICLE TRAIL</span>
+            </div>
+            <div class="effect-copy">
+              <div><span class="effect-num">B</span><h4>海洋流场</h4><span class="en">OCEAN TRAILS</span></div>
+              <p>以粒子尾迹追踪表层流。它们漂移、汇聚、散开，记录着一片海几天的记忆。</p>
+            </div>
+          </article>
+
+          <article class="effect-card" data-reveal style="--d:160ms">
+            <div class="effect-visual wave-visual">
+              <svg viewBox="0 0 260 120" preserveAspectRatio="none" aria-hidden="true">
+                <path class="wave w1" d="M0 78 Q 32 60 64 78 T 128 78 T 192 78 T 256 78 T 320 78 T 384 78" />
+                <path class="wave w2" d="M0 88 Q 32 74 64 88 T 128 88 T 192 88 T 256 88 T 320 88 T 384 88" />
+                <path class="wave w3" d="M0 98 Q 32 88 64 98 T 128 98 T 192 98 T 256 98 T 320 98 T 384 98" />
+              </svg>
+              <span class="visual-tag">SWH · DISPLACEMENT</span>
+            </div>
+            <div class="effect-copy">
+              <div><span class="effect-num">C</span><h4>波浪推移</h4><span class="en">WAVE DISPLACEMENT</span></div>
+              <p>用有效波高驱动法线与高光。像 Ventusky 上那片起伏的海面，浪从数据里长出来。</p>
+            </div>
+          </article>
+
+          <article class="effect-card" data-reveal style="--d:220ms">
+            <div class="effect-visual storm-visual">
+              <div class="storm-core"></div>
+              <svg class="bolt" viewBox="0 0 120 110" aria-hidden="true">
+                <path d="M66 6 L38 54 L60 52 L44 104 L88 42 L64 46 Z" />
+              </svg>
+              <span class="visual-tag">DEEP CONVECTION · FLASH</span>
+            </div>
+            <div class="effect-copy">
+              <div><span class="effect-num">D</span><h4>闪电</h4><span class="en">LIGHTNING</span></div>
+              <p>只在深对流区域放电。短促、克制、有电流感——像是地球在深夜里的一次眨眼。</p>
+            </div>
+          </article>
+        </div>
+
+        <div class="effects-foot" data-reveal>
+          <span class="big-stat">04</span>
+          <p>种正在原型的动态效果。<br />全部运行在浏览器内，不使用视频贴片。</p>
+          <span class="mono">WEBGL2 / GLSL / INSTANCED PARTICLES</span>
+        </div>
+      </div>
+    </section>
+
+    <!-- ================= PHASE 02 ================= -->
+    <section class="phase-2 section" id="phase-2" data-scene="phase-2">
+      <div class="ghost-index" aria-hidden="true">02</div>
+      <div class="section-shell">
+        <div class="p2-head">
+          <div class="phase-kicker" data-reveal>
+            <span class="phase-pill phase-pill-2">PHASE 02</span>
+            <span class="status-pill is-future"><i></i> 规划中 / NEXT ORBIT</span>
+          </div>
+          <h2 class="phase-title" data-reveal style="--d:80ms">
+            <span class="cn">预测地球</span>
+            <span class="en">FORECAST EARTH</span>
+          </h2>
+          <p class="phase-lead" data-reveal style="--d:160ms">让地球，<br />提前发生。</p>
+          <p class="phase-body" data-reveal style="--d:240ms">
+            把实时运行的 AI 气象与海洋模型接进来。它将不再只是“一层”，
+            而是一个有时间轴、有剖面、有涡旋、有概率的四维地球。
+            我们不再只看此刻，而是站在此刻，向未来多看十天。
+          </p>
+          <div class="model-strip" data-reveal style="--d:320ms" aria-label="AI 模型示例">
+            <span class="model-label">MODELS /</span>
+            <span class="model-chip">GraphCast</span>
+            <span class="model-chip">Pangu-Weather</span>
+            <span class="model-chip">FourCastNet</span>
+            <span class="model-chip">FuXi</span>
+            <span class="model-chip">AIFS</span>
+          </div>
+        </div>
+
+        <div class="p2-capabilities">
+          <article class="cap-card" data-reveal>
+            <span class="cap-index">A</span>
+            <h4>剖面与断面</h4>
+            <span class="en">CROSS-SECTIONS</span>
+            <p>沿任意经纬线切开大气与海洋，读取垂直方向上的温度、密度与流场。</p>
+          </article>
+          <article class="cap-card" data-reveal style="--d:80ms">
+            <span class="cap-index">B</span>
+            <h4>等值面</h4>
+            <span class="en">ISOSURFACES</span>
+            <p>0°C 层、温跃层、密度面——把不可见的界面变成半透明的曲面。</p>
+          </article>
+          <article class="cap-card" data-reveal style="--d:160ms">
+            <span class="cap-index">C</span>
+            <h4>涡旋体渲染</h4>
+            <span class="en">VORTEX VOLUMES</span>
+            <p>中尺度涡、台风暖心、极涡。用体渲染看见旋转本身的结构。</p>
+          </article>
+          <article class="cap-card" data-reveal style="--d:240ms">
+            <span class="cap-index">D</span>
+            <h4>GPU 粒子</h4>
+            <span class="en">GPU PARTICLES</span>
+            <p>百万级粒子在预报场中实时流动，把“概率”变成可以观看的运动。</p>
+          </article>
+        </div>
+
+        <div class="forecast-timeline" data-reveal>
+          <div class="timeline-head">
+            <span>FORECAST TIMELINE / 预报时间轴</span>
+            <b>ANIMATION PREVIEW</b>
+          </div>
+          <div class="timeline-track">
+            <i class="timeline-fill"></i>
+            <span class="timeline-playhead"></span>
+            <span class="tick" style="--x:0%"><b>T+0</b><em>NOW</em></span>
+            <span class="tick" style="--x:20%"><b>+24h</b><em>明天</em></span>
+            <span class="tick" style="--x:40%"><b>+72h</b><em>三天</em></span>
+            <span class="tick" style="--x:65%"><b>+168h</b><em>一周</em></span>
+            <span class="tick" style="--x:100%"><b>+240h</b><em>十天</em></span>
+          </div>
+          <div class="timeline-foot">
+            <span>ENSEMBLE MEAN</span><span>PROBABILITY FIELD</span><span>DATA ASSIMILATION</span><span>TIME SCRUB</span>
+          </div>
+        </div>
+      </div>
+      <div class="section-index" aria-hidden="true">02 <i>/</i> FORECAST</div>
+    </section>
+
+    <!-- ================= PHASE 03 ================= -->
+    <section class="phase-3 section" id="phase-3" data-scene="phase-3">
+      <div class="ghost-index" aria-hidden="true">03</div>
+      <div class="section-shell">
+        <div class="p3-head">
+          <div class="phase-kicker is-center" data-reveal>
+            <span class="phase-pill phase-pill-3">PHASE 03</span>
+            <span class="status-pill is-future"><i></i> 构想中 / DEEP FUTURE</span>
+          </div>
+          <h2 class="phase-title is-center" data-reveal style="--d:80ms">
+            <span class="cn">智能地球</span>
+            <span class="en">REASONING EARTH</span>
+          </h2>
+          <p class="phase-lead is-center" data-reveal style="--d:160ms">当地球拥有记忆，<br />它可以被追问。</p>
+          <p class="p3-body" data-reveal style="--d:240ms">
+            第三阶段不是一个更漂亮的地球，而是一个可以被询问、被推演、
+            被质疑的数字孪生系统。它记得每一场台风，理解每一次异常，
+            也能回答一个还没有发生的问题。
+          </p>
+        </div>
+
+        <div class="p3-lower">
+          <div class="terminal-card" data-reveal>
+            <div class="terminal-head">
+              <span><i></i><i></i><i></i></span>
+              <b>EARTH://CONSOLE</b>
+              <em>CONCEPT PREVIEW</em>
+            </div>
+            <div class="terminal-body">
+              <p class="term-line"><span>&gt;</span> 如果东海海温再升高 2°C，<br class="m" />黑潮会发生什么？</p>
+              <p class="term-meta">EARTH // 检索 2015–2025 同化场 · 构建 12 个情景</p>
+              <p class="term-answer"><span>→</span> 推断：黑潮主轴北移约 40 km，<br class="m" />中尺度涡动能增加约 12%。</p>
+              <p class="term-cursor"><span>▍</span></p>
+            </div>
+            <div class="terminal-foot">
+              <span>MEMORY 2.1 PB</span><span>ENSEMBLE 12</span><span>CONFIDENCE 0.74</span>
+            </div>
+          </div>
+
+          <div class="p3-concepts">
+            <article data-reveal><span>01</span><h4>地球记忆</h4><p>时序数据湖与事件图谱。每一个状态都可追溯。</p></article>
+            <article data-reveal style="--d:80ms"><span>02</span><h4>因果推理</h4><p>不只预测状态，也解释状态为什么发生。</p></article>
+            <article data-reveal style="--d:160ms"><span>03</span><h4>情景孪生</h4><p>“如果路径偏北 100 公里？”在平行地球中预演。</p></article>
+            <article data-reveal style="--d:240ms"><span>04</span><h4>对话地球</h4><p>用自然语言，询问任意坐标、任意时刻。</p></article>
+          </div>
+        </div>
+      </div>
+      <div class="section-index" aria-hidden="true">03 <i>/</i> INTELLIGENCE</div>
+    </section>
+
+    <!-- ================= OUTRO ================= -->
+    <section class="outro section" id="outro" data-scene="outro">
+      <div class="section-shell outro-shell">
+        <p class="eyebrow" data-reveal><span>∞</span> END OF CURRENT ORBIT</p>
+        <h2 class="outro-title" data-reveal style="--d:80ms">那个地球，<br /><em>还在成形。</em></h2>
+        <p class="outro-copy" data-reveal style="--d:160ms">
+          第一阶段正在轨道上。下面四颗地球，是抵达 That Earth 之前的先行实验——
+          分别向 earth.nullschool.net、Fluid Earth、Earth Clock 与 Ventusky 学习、复刻与再搭建。
+        </p>
+
+        <div class="case-head" data-reveal>
+          <span>REFERENCE EARTHS / 参考复刻</span>
+          <span>04 CASES · LIVE</span>
+        </div>
+
+        <div class="subdomains" data-reveal style="--d:240ms">
+          <a href="https://earth-classic.that.earth/" target="_blank" rel="noopener noreferrer" class="subdomain">
+            <span class="subdomain-top"><b>earth-classic</b><i class="is-live">LIVE</i></span>
+            <span class="subdomain-cn">经典地球 · 实时风场</span>
+            <span class="subdomain-en">EARTH CLASSIC / NULLSCHOOL</span>
+            <span class="subdomain-arrow">↗</span>
+          </a>
+          <a href="https://fluid-earth.that.earth/" target="_blank" rel="noopener noreferrer" class="subdomain">
+            <span class="subdomain-top"><b>fluid-earth</b><i class="is-live">LIVE</i></span>
+            <span class="subdomain-cn">流体地球 · 大气与海洋</span>
+            <span class="subdomain-en">FLUID EARTH / WEBGL</span>
+            <span class="subdomain-arrow">↗</span>
+          </a>
+          <a href="https://earth-clock.that.earth/" target="_blank" rel="noopener noreferrer" class="subdomain">
+            <span class="subdomain-top"><b>earth-clock</b><i class="is-live">LIVE</i></span>
+            <span class="subdomain-cn">地球时钟 · 光照与时间</span>
+            <span class="subdomain-en">EARTH CLOCK / SUNLIGHT</span>
+            <span class="subdomain-arrow">↗</span>
+          </a>
+          <a href="https://ventusky.that.earth/" target="_blank" rel="noopener noreferrer" class="subdomain">
+            <span class="subdomain-top"><b>ventusky</b><i class="is-live">LIVE</i></span>
+            <span class="subdomain-cn">风图地球 · 天气场</span>
+            <span class="subdomain-en">VENTUSKY / WEATHER MAP</span>
+            <span class="subdomain-arrow">↗</span>
+          </a>
+        </div>
+
+        <div class="case-repos" data-reveal>
+          <span>SOURCE /</span>
+          <a href="https://github.com/yaohengkai/earth-rea" target="_blank" rel="noopener noreferrer">earth-rea ↗</a>
+          <a href="https://github.com/yaohengkai/fluid-earth" target="_blank" rel="noopener noreferrer">fluid-earth ↗</a>
+          <a href="https://github.com/yaohengkai/earth-clock" target="_blank" rel="noopener noreferrer">earth-clock ↗</a>
+          <a href="https://github.com/yaohengkai/ventusky-rea" target="_blank" rel="noopener noreferrer">ventusky-rea ↗</a>
+        </div>
+
+        <div class="outro-cta" data-reveal style="--d:320ms">
+          <a class="mail-link" href="mailto:hello@that.earth">hello@that.earth <span>↗</span></a>
+          <a class="back-top" href="#hero">回到轨道起点 <span>↑</span></a>
+        </div>
+      </div>
+
+      <footer class="site-footer">
+        <div class="footer-left">
+          <span class="footer-mark">TE</span>
+          <span>THAT EARTH · 那个地球</span>
+          <span class="footer-year">© 2026</span>
+        </div>
+        <div class="footer-mid">以公开数据，重建一颗可供观看的地球。</div>
+        <div class="footer-right">
+          <span>EARTH IMAGERY / NASA BLUE MARBLE · NEO</span>
+          <span>BUILT WITH THREE.JS</span>
+        </div>
+      </footer>
+    </section>
+  </main>
+
+  <noscript>
+    <div class="noscript">That Earth requires JavaScript to render the 3D globe.</div>
+  </noscript>
+
+  <script type="module" src="/src/main.js"></script>
+</body>
+</html>

@@ -1,0 +1,19 @@
+{
+  "name": "that-earth",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "description": "That Earth · 那个地球 — a parallax digital-earth landing page",
+  "license": "MIT",
+  "scripts": {
+    "dev": "vite --host 127.0.0.1",
+    "build": "vite build",
+    "preview": "vite preview --host 127.0.0.1"
+  },
+  "dependencies": {
+    "three": "0.169.0"
+  },
+  "devDependencies": {
+    "vite": "5.4.10"
+  }
+}
