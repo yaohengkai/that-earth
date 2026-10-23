@@ -657,15 +657,39 @@
       </div>
 
       <footer class="site-footer">
-        <div class="footer-left">
-          <span class="footer-mark">TE</span>
-          <span>THAT EARTH · 那个地球</span>
-          <span class="footer-year">© 2026</span>
+        <div class="footer-main">
+          <div class="footer-left">
+            <span class="footer-mark">TE</span>
+            <span>THAT EARTH · 那个地球</span>
+            <span class="footer-year">© 2026</span>
+          </div>
+          <div class="footer-mid">以公开数据，重建一颗可供观看的地球。</div>
+          <div class="footer-right">
+            <span>EARTH IMAGERY / NASA BLUE MARBLE · NEO</span>
+            <span>BUILT WITH THREE.JS</span>
+          </div>
         </div>
-        <div class="footer-mid">以公开数据，重建一颗可供观看的地球。</div>
-        <div class="footer-right">
-          <span>EARTH IMAGERY / NASA BLUE MARBLE · NEO</span>
-          <span>BUILT WITH THREE.JS</span>
+
+        <!-- Vercount fills the vercount_value_* spans and reveals their containers.
+             The strip stays hidden by default so placeholders never show when the
+             counter is blocked or offline. -->
+        <div class="site-counter" data-counter>
+          <span class="counter-lead"><i aria-hidden="true"></i><span>TELEMETRY / 访问统计</span></span>
+          <div class="counter-stats">
+            <span class="counter-stat">
+              <span class="counter-key">本页浏览</span>
+              <span class="counter-num" id="vercount_container_page_pv" style="display:none"><span id="vercount_value_page_pv">--</span></span>
+            </span>
+            <span class="counter-stat">
+              <span class="counter-key">独立访客</span>
+              <span class="counter-num" id="vercount_container_site_uv" style="display:none"><span id="vercount_value_site_uv">--</span></span>
+            </span>
+            <span class="counter-stat">
+              <span class="counter-key">累计浏览</span>
+              <span class="counter-num" id="vercount_container_site_pv" style="display:none"><span id="vercount_value_site_pv">--</span></span>
+            </span>
+          </div>
+          <a class="counter-src" href="https://vercount.one/" target="_blank" rel="noopener noreferrer">VERCOUNT <span>↗</span></a>
         </div>
       </footer>
     </section>
@@ -676,5 +700,6 @@
   </noscript>
 
   <script type="module" src="/src/main.js"></script>
+  <script defer src="https://events.vercount.one/js"></script>
 </body>
 </html>

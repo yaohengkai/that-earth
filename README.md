@@ -41,6 +41,7 @@ pnpm preview
 - `src/scene/shaders.js` — 地表、云层、大气、数据层、等值面与星空的 GLSL（含明亮主题调色分支）
 - `src/scene/Flow.js` — 风场 / 洋流粒子尾迹与闪电
 - `src/ui.js` — 滚动状态、固定侧栏、HUD、数据卡片、分段文案与自动播放
+- `src/counter.js` — 页脚访问统计（Vercount）：等待计数返回、千分位格式化与显隐
 - `src/main.js` — 加载、主题 / 语言控制、启动与渲染循环
 
 ## 场景逻辑

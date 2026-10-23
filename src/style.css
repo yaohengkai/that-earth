@@ -2940,10 +2940,6 @@ body.is-ready.hud-on .scroll-meter {
 }
 
 .site-footer {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 2rem;
   width: 100%;
   padding: 22px var(--gutter);
   border-top: 1px solid var(--line);
@@ -2951,6 +2947,14 @@ body.is-ready.hud-on .scroll-meter {
   font-family: var(--mono);
   font-size: 7px;
   letter-spacing: 0.1em;
+}
+
+.footer-main {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 2rem;
+  width: 100%;
 }
 
 .footer-left {
@@ -2982,6 +2986,94 @@ body.is-ready.hud-on .scroll-meter {
   display: flex;
   gap: 18px;
   text-align: right;
+}
+
+/* Vercount telemetry strip ----------------------------------------- */
+
+.site-counter {
+  display: none;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px 1.5rem;
+  width: 100%;
+  margin-top: 15px;
+  padding-top: 12px;
+  border-top: 1px solid var(--line);
+  letter-spacing: 0.12em;
+}
+
+.site-counter.is-ready {
+  display: flex;
+  animation: counterIn 0.9s var(--ease) both;
+}
+
+@keyframes counterIn {
+  from {
+    opacity: 0;
+    transform: translate3d(0, 6px, 0);
+  }
+  to {
+    opacity: 1;
+    transform: translate3d(0, 0, 0);
+  }
+}
+
+.counter-lead {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--faint);
+  text-transform: uppercase;
+}
+
+.counter-lead i {
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: var(--aqua);
+  box-shadow: 0 0 7px var(--aqua);
+  animation: blink 2.4s infinite;
+}
+
+.counter-stats {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px 1.25rem;
+}
+
+.counter-stat {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 7px;
+}
+
+.counter-key {
+  color: var(--faint);
+  text-transform: uppercase;
+}
+
+.counter-num {
+  color: var(--ink-2);
+  font-size: 8px;
+  letter-spacing: 0.06em;
+  font-variant-numeric: tabular-nums;
+}
+
+.counter-src {
+  color: var(--faint);
+  text-transform: uppercase;
+  transition: color 0.3s;
+}
+
+.counter-src:hover {
+  color: var(--aqua);
+}
+
+.counter-src span {
+  margin-left: 3px;
+  color: var(--aqua);
 }
 
 /* ------------------------------------------------------------------ */
@@ -3694,11 +3786,23 @@ body.is-ready.hud-on .scroll-meter {
   }
 
   .site-footer {
+    padding: 18px var(--gutter) 120px;
+    font-size: 6.5px;
+  }
+
+  .footer-main {
     flex-direction: column;
     gap: 8px;
     align-items: flex-start;
-    padding: 18px var(--gutter) 120px;
-    font-size: 6.5px;
+  }
+
+  .site-counter {
+    justify-content: flex-start;
+    gap: 8px 1.15rem;
+  }
+
+  .counter-src {
+    display: none;
   }
 
   .footer-mid {
@@ -3818,8 +3922,13 @@ body.is-ready.hud-on .scroll-meter {
   .live-dot,
   .status-pill i,
   .header-status i,
-  .hud-live i {
+  .hud-live i,
+  .counter-lead i {
     animation: none !important;
+  }
+
+  .site-counter.is-ready {
+    animation: none;
   }
 
   [data-reveal] {

@@ -1,9 +1,11 @@
 import "./style.css";
 import { World } from "./scene/World.js";
 import { Experience } from "./ui.js";
+import { initCounter } from "./counter.js";
 import { initI18n, t, getLanguage, applyLanguage, detectSystemLanguage } from "./i18n.js";
 
 const i18n = initI18n();
+initCounter();
 
 if ("scrollRestoration" in history) {
   history.scrollRestoration = "manual";

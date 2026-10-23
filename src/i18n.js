@@ -131,6 +131,10 @@ export const EN_TEXT = {
   "回到轨道起点": "Back to the starting orbit",
   "THAT EARTH · 那个地球": "THAT EARTH · THE EARTH PROJECT",
   "以公开数据，重建一颗可供观看的地球。": "Rebuilding a watchable Earth from open data.",
+  "TELEMETRY / 访问统计": "SITE TELEMETRY",
+  "本页浏览": "PAGE VIEWS",
+  "独立访客": "VISITORS",
+  "累计浏览": "TOTAL VISITS",
   "That Earth 需要启用 JavaScript 才能渲染三维地球。": "That Earth requires JavaScript to render the 3D globe."
 };
 
