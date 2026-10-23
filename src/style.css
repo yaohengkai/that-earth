@@ -129,6 +129,35 @@ ol {
   backface-visibility: hidden;
 }
 
+/* Drag-to-rotate affordance for the globe. */
+body.globe-hover {
+  cursor: grab;
+}
+
+body.globe-dragging {
+  cursor: grabbing;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+body.globe-dragging * {
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+/* Full-screen volcanic easter egg. */
+#eruptionFx {
+  position: fixed;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 120;
+  display: none;
+  pointer-events: none;
+  opacity: 1;
+  transition: opacity 0.85s ease;
+}
+
 .space-scrim {
   position: fixed;
   inset: 0;

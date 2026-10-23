@@ -19,6 +19,7 @@ import {
   nodeFragment,
 } from "./shaders.js";
 import { FlowTrails, LightningSystem } from "./Flow.js";
+import { EruptionFX } from "./Eruption.js";
 import { makeGlowTexture, makeSoftSprite, randomUnitVector } from "./glow.js";
 
 const clamp = THREE.MathUtils.clamp;
@@ -34,6 +35,39 @@ const shortestAngle = (from, to) => {
   if (d < -Math.PI) d += Math.PI * 2;
   return from + d;
 };
+
+const TAU = Math.PI * 2;
+
+// UI / cards should keep their normal click and scroll behaviour.
+const DRAG_UI_BLOCK =
+  "a, button, input, select, textarea, label, [role='button'], [contenteditable='true'], " +
+  ".site-header, .rail, .hud, .scroll-meter, .autoplay, .loader, " +
+  ".var-card, .cap-card, .terminal-card, .effect-card, .subdomain, .forecast-timeline, " +
+  ".model-strip, .outro-cta, .site-footer";
+
+// On touch, also ignore text blocks so a swipe over copy still scrolls the page.
+const DRAG_TOUCH_BLOCK =
+  DRAG_UI_BLOCK +
+  ", p, h1, h2, h3, h4, h5, h6, li, dl, dt, dd, .eyebrow, .phase-kicker, .phase-title, " +
+  ".phase-lead, .phase-body, .outro-copy, .manifesto-copy, .case-head, .time-list, " +
+  ".source-list, .chips, .phase-meta, .phase-tags, .scroll-cue, .section-index, " +
+  ".ghost-index, .p2-head, .p3-head, .p3-lower, .p3-concepts, .p3-body, .variables-head, " +
+  ".variables-foot, .var-copy, .var-progress, .var-layer-hud, .effects-head, .effects-status, " +
+  ".effects-foot, .subdomains, .hero-coords, .hero-eyebrow, .hero-aside, .hero-lede, " +
+  ".hero-intro, .hero-meta";
+
+const DRAG_YAW_PER_PX = 0.0062;
+const DRAG_PITCH_PER_PX = 0.0042;
+const DRAG_PITCH_LIMIT = 0.8;
+const DRAG_RETURN_DELAY = 3;
+const DRAG_RETURN_LAMBDA = 3.2;
+
+/* Click five times on the same spot to wake the planet up. */
+const EGG_CLICKS = 5;
+const EGG_CLICK_WINDOW = 1800;
+const EGG_CLICK_RADIUS = 64;
+const EGG_FILL_TARGET = 1.18;
+const EGG_EXPLODE_DELAY = 420;
 
 const TARGETS = {
   hero: { z: 16, x: 0.6, y: 0.55, yaw: 2.15, tilt: 0.06 },
@@ -134,6 +168,50 @@ export class World {
     this.yaw = TARGETS.hero.yaw;
     this.tiltX = TARGETS.hero.tilt;
 
+    /* drag-to-rotate */
+    this.dragYaw = 0;
+    this.dragPitch = 0;
+    this.dragActive = false;
+    this._dragCandidate = false;
+    this._dragPointerId = null;
+    this._dragStartX = 0;
+    this._dragStartY = 0;
+    this._dragLastX = 0;
+    this._dragLastY = 0;
+    this._dragLastT = 0;
+    this._dragVelYaw = 0;
+    this._dragVelPitch = 0;
+    this._dragReleaseT = 0;
+    this._dragReturn = false;
+    this._globeHover = false;
+
+    /* five-click easter egg */
+    this.egg = {
+      active: false,
+      exploding: false,
+      locked: false,
+      resetting: false,
+      count: 0,
+      lastClickAt: 0,
+      originX: 0,
+      originY: 0,
+      fill0: 0.3,
+      scale: 1,
+      targetScale: 1,
+      baseCamZ: this.camZ,
+      baseYaw: this.yaw,
+      baseTilt: this.tiltX,
+      baseSpinOffset: 0,
+      explodeAt: 0,
+      restoring: false,
+    };
+    this.eruption = null;
+    this._eggSafety = null;
+    this._tapCandidate = false;
+    this._tapPointerId = null;
+    this._tapStartX = 0;
+    this._tapStartY = 0;
+
     this.activeLayer = -1;
     this.layerStates = [];
     this.solarFade = 0;
@@ -155,6 +233,7 @@ export class World {
     this.buildStars();
     this.buildNebula();
     this.buildSolarSystem();
+    this.bindGlobeDrag();
   }
 
   /* --------------------------------------------------------------------- */
@@ -663,6 +742,7 @@ export class World {
           uColorB: { value: new THREE.Color(def.colorB) },
           uLightTheme: { value: 0 },
           uPeelDir: { value: new THREE.Vector3(0.85, 0.42, 0.3).normalize() },
+          uDay: { value: this.dayMap },
         },
         transparent: true,
         depthWrite: false,
@@ -923,6 +1003,15 @@ export class World {
       target = this.targetFor(state.scene);
     }
 
+    // The easter egg freezes the view around the centred, growing globe.
+    if (this.egg.active) {
+      target.x = 0;
+      target.y = 0;
+      target.z = this.egg.baseCamZ;
+      target.yaw = this.egg.baseYaw;
+      target.tilt = this.egg.baseTilt;
+    }
+
     const camLambda = 2.7;
     this.camZ = damp(this.camZ, target.z, camLambda, dt);
     this.earthX = damp(this.earthX, target.x, 3.2, dt);
@@ -937,23 +1026,32 @@ export class World {
     /* Scroll maps to a persistent rotation target instead of a spring that
        returns to zero. This keeps the globe moving forward smoothly and
        removes the small backward catch-up after each wheel gesture. */
-    this.spinOffset = damp(this.spinOffset, state.scrollY * 0.00032, 5.0, dt);
+    this.spinOffset = damp(
+      this.spinOffset,
+      this.egg.active ? this.egg.baseSpinOffset : state.scrollY * 0.00032,
+      5.0,
+      dt
+    );
 
-    const bob = this.reducedMotion ? 0 : Math.sin(this.time * 0.18) * 0.014;
+    this._updateDrag(dt);
+    this._updateEgg(dt);
+
+    const eggFrozen = this.egg.active;
+    const bob = this.reducedMotion || eggFrozen ? 0 : Math.sin(this.time * 0.18) * 0.014;
     this.earthGroup.position.set(this.earthX, this.earthY + bob, 0);
-    this.earthGroup.rotation.y = this.pointer.x * 0.02;
-    this.earthGroup.rotation.x = this.pointer.y * 0.016;
+    this.earthGroup.rotation.y = eggFrozen ? 0 : this.pointer.x * 0.02;
+    this.earthGroup.rotation.x = eggFrozen ? 0 : this.pointer.y * 0.016;
 
-    this.tilt.rotation.x = this.tiltX;
+    this.tilt.rotation.x = this.tiltX + this.dragPitch;
     this.tilt.rotation.z = -0.205;
 
-    const drift = this.reducedMotion ? 0 : Math.sin(this.time * 0.055) * 0.05;
-    this.spin.rotation.y = this.yaw + this.spinOffset + drift;
+    const drift = this.reducedMotion || eggFrozen ? 0 : Math.sin(this.time * 0.055) * 0.05;
+    this.spin.rotation.y = this.yaw + this.spinOffset + drift + this.dragYaw;
     this.clouds.rotation.y += dt * (this.reducedMotion ? 0.001 : 0.0075);
 
     this.camera.position.set(
-      this.pointer.x * (this.isMobile ? 0.035 : 0.14),
-      this.pointer.y * (this.isMobile ? 0.028 : 0.1),
+      eggFrozen ? 0 : this.pointer.x * (this.isMobile ? 0.035 : 0.14),
+      eggFrozen ? 0 : this.pointer.y * (this.isMobile ? 0.028 : 0.1),
       this.camZ
     );
     this.camera.lookAt(0, 0, 0);
@@ -1063,8 +1161,16 @@ export class World {
 
     /* atmosphere breathing */
     const light = this.theme === "light";
-    this.atmosphereMaterial.uniforms.uOpacity.value = (light ? 0.24 : 0.62) + Math.sin(this.time * 0.4) * 0.022;
-    this.halo.material.opacity = (light ? 0.01 : 0.18) + Math.sin(this.time * 0.28) * 0.004 + near * (light ? 0.003 : 0.06);
+    const eggGlow = this._eggGlowFactor();
+    this.atmosphereMaterial.uniforms.uOpacity.value =
+      ((light ? 0.24 : 0.62) + Math.sin(this.time * 0.4) * 0.022) * eggGlow;
+    this.halo.material.opacity =
+      ((light ? 0.01 : 0.18) + Math.sin(this.time * 0.28) * 0.004 + near * (light ? 0.003 : 0.06)) *
+      eggGlow;
+    if (this.outerAtmosphereMaterial) {
+      this.outerAtmosphereMaterial.uniforms.uOpacity.value =
+        (light ? 0 : 0.13) * eggGlow;
+    }
 
     this.activeLayer = active;
     this.lastScene = state.scene;
@@ -1180,7 +1286,528 @@ export class World {
   }
 
   setPointer(x, y) {
+    if (this.dragActive) return;
     this.pointerTarget.set(clamp(x, -1, 1), clamp(y, -1, 1));
+  }
+
+  /* --------------------------------------------------------------------- */
+  /*  Drag to rotate                                                       */
+  /* --------------------------------------------------------------------- */
+
+  bindGlobeDrag() {
+    this._onGlobePointerDown = (event) => {
+      if (this._dragPointerId !== null || this._tapPointerId !== null) return;
+      if (event.pointerType === "mouse" && event.button !== 0) return;
+      if (this.egg.exploding) return;
+
+      const now = performance.now();
+      const onGlobe = this._isGlobeHit(event.clientX, event.clientY);
+      const nearEgg = this._eggTapNear(event.clientX, event.clientY, now);
+      if (!onGlobe && !nearEgg) return;
+      if (this._isEggTapBlocked(event.target)) return;
+
+      this._tapCandidate = true;
+      this._tapPointerId = event.pointerId;
+      this._tapStartX = event.clientX;
+      this._tapStartY = event.clientY;
+
+      // While the globe is growing it can still be inspected: allow dragging
+      // it, but keep the last few hundred milliseconds before the eruption
+      // and the explosion itself locked.
+      const eggLockedForDrag =
+        this.egg.exploding ||
+        (this.egg.active && this.egg.count >= EGG_CLICKS);
+      const dragBlocked =
+        this.egg.active && !eggLockedForDrag
+          ? this._isEggTapBlocked(event.target)
+          : this._isDragBlocked(event.target, event.pointerType);
+      const dragEligible = onGlobe && !eggLockedForDrag && !dragBlocked;
+
+      if (dragEligible) {
+        this._dragCandidate = true;
+        this._dragPointerId = event.pointerId;
+        this._dragStartX = this._dragLastX = event.clientX;
+        this._dragStartY = this._dragLastY = event.clientY;
+        this._dragLastT = now;
+        this._dragVelYaw = 0;
+        this._dragVelPitch = 0;
+        this._dragReleaseT = 0;
+        this._dragReturn = false;
+      } else {
+        this._dragCandidate = false;
+      }
+
+      this._setGlobeHover(false);
+
+      if (event.pointerType !== "touch") {
+        // Stop the browser from starting a text selection under the cursor.
+        event.preventDefault();
+      }
+    };
+
+    this._onGlobePointerMove = (event) => {
+      if (this._tapPointerId === event.pointerId && this._tapCandidate && !this.dragActive) {
+        if (
+          Math.hypot(event.clientX - this._tapStartX, event.clientY - this._tapStartY) > 6
+        ) {
+          this._tapCandidate = false;
+        }
+      }
+
+      if (this._dragPointerId === null) {
+        if (event.pointerType !== "touch" && !this.dragActive) this._updateGlobeHover(event);
+        return;
+      }
+      if (event.pointerId !== this._dragPointerId) return;
+
+      if (!this.dragActive) {
+        const dx = event.clientX - this._dragStartX;
+        const dy = event.clientY - this._dragStartY;
+        if (Math.hypot(dx, dy) < 4) return;
+        this.dragActive = true;
+        this._tapCandidate = false;
+        this._setGlobeHover(false);
+        document.body.classList.add("globe-dragging");
+        window.dispatchEvent(new CustomEvent("that-earth:globe-drag"));
+      }
+
+      const now = performance.now();
+      const dt = Math.max(0.008, (now - this._dragLastT) / 1000);
+      this._dragBy(event.clientX - this._dragLastX, event.clientY - this._dragLastY, dt);
+      this._dragLastX = event.clientX;
+      this._dragLastY = event.clientY;
+      this._dragLastT = now;
+      if (event.cancelable) event.preventDefault();
+    };
+
+    this._onGlobePointerUp = (event) => {
+      const isDrag = event.pointerId === this._dragPointerId;
+      const isTap = event.pointerId === this._tapPointerId;
+      if (!isDrag && !isTap) return;
+
+      if (isDrag && this.dragActive) {
+        const now = performance.now();
+        if (now - this._dragLastT > 140) {
+          this._dragVelYaw = 0;
+          this._dragVelPitch = 0;
+        }
+        this._dragVelYaw = clamp(this._dragVelYaw * 0.55, -2.2, 2.2);
+        this._dragVelPitch = clamp(this._dragVelPitch * 0.4, -1.2, 1.2);
+        this._dragReleaseT = performance.now();
+        this.dragActive = false;
+        document.body.classList.remove("globe-dragging");
+      }
+
+      if (isDrag) {
+        this._dragCandidate = false;
+        this._dragPointerId = null;
+      }
+
+      if (isTap) {
+        const moved = Math.hypot(
+          event.clientX - this._tapStartX,
+          event.clientY - this._tapStartY
+        );
+        const wasTap = this._tapCandidate && !this.dragActive && moved < 6;
+        this._tapCandidate = false;
+        this._tapPointerId = null;
+        if (wasTap) this._handleEggTap(event.clientX, event.clientY);
+      }
+
+      if (event.pointerType !== "touch") this._updateGlobeHover(event);
+    };
+
+    this._onGlobePointerCancel = (event) => {
+      if (event.pointerId === this._tapPointerId) {
+        this._tapCandidate = false;
+        this._tapPointerId = null;
+      }
+      if (event.pointerId === this._dragPointerId) this._cancelGlobeDrag();
+    };
+
+    this._onGlobeTouchStart = (event) => {
+      if (event.touches && event.touches.length > 1) {
+        this._tapCandidate = false;
+        this._tapPointerId = null;
+        this._cancelGlobeDrag();
+      }
+    };
+
+    this._onGlobeTouchMove = (event) => {
+      if ((this._dragCandidate || this.dragActive) && event.cancelable) {
+        event.preventDefault();
+      }
+    };
+
+    this._onGlobeWheel = () => {
+      this._tapCandidate = false;
+      this._tapPointerId = null;
+      if (this._dragCandidate || this.dragActive) this._cancelGlobeDrag();
+      this._setGlobeHover(false);
+      if (this.egg.count > 0 && !this.egg.exploding) this._resetEggSequence();
+    };
+
+    this._onGlobeLeave = () => this._setGlobeHover(false);
+
+    this._onGlobeBlur = () => {
+      this._setGlobeHover(false);
+      this._tapCandidate = false;
+      this._tapPointerId = null;
+      if (this._dragCandidate || this.dragActive) this._cancelGlobeDrag();
+    };
+
+    this._onGlobeVisibility = () => {
+      if (document.hidden) {
+        this._tapCandidate = false;
+        this._tapPointerId = null;
+        if (this._dragCandidate || this.dragActive) this._cancelGlobeDrag();
+      }
+    };
+
+    this._onGlobeScroll = () => {
+      this._setGlobeHover(false);
+      if (this.egg.count > 0 && !this.egg.exploding) this._resetEggSequence();
+    };
+
+    window.addEventListener("pointerdown", this._onGlobePointerDown, { capture: true, passive: false });
+    window.addEventListener("pointermove", this._onGlobePointerMove, { passive: false });
+    window.addEventListener("pointerup", this._onGlobePointerUp, { passive: true });
+    window.addEventListener("pointercancel", this._onGlobePointerCancel, { passive: true });
+    window.addEventListener("touchstart", this._onGlobeTouchStart, { passive: true });
+    window.addEventListener("touchmove", this._onGlobeTouchMove, { passive: false });
+    window.addEventListener("wheel", this._onGlobeWheel, { passive: true });
+    window.addEventListener("blur", this._onGlobeBlur);
+    document.addEventListener("mouseleave", this._onGlobeLeave);
+    document.addEventListener("visibilitychange", this._onGlobeVisibility);
+    window.addEventListener("scroll", this._onGlobeScroll, { passive: true });
+  }
+
+  _globeScreenCircle() {
+    if (!this.earthGroup || !this.camera) return null;
+    this.camera.updateMatrixWorld();
+    const center = this.earthGroup.position.clone();
+    const toCenter = center.clone().sub(this.camera.position);
+    const forward = this.camera.getWorldDirection(new THREE.Vector3());
+    if (toCenter.dot(forward) <= 0) return null;
+
+    const projected = center.clone().project(this.camera);
+    const right = new THREE.Vector3().setFromMatrixColumn(this.camera.matrixWorld, 0);
+    const scale = this.earthGroup.scale ? Math.max(0.001, this.earthGroup.scale.x) : 1;
+    const edge = center.clone().addScaledVector(right, 1.06 * scale).project(this.camera);
+    const width = window.innerWidth;
+    const height = window.innerHeight;
+    const cx = (projected.x * 0.5 + 0.5) * width;
+    const cy = (-projected.y * 0.5 + 0.5) * height;
+    const radius = Math.hypot(
+      (edge.x - projected.x) * 0.5 * width,
+      (edge.y - projected.y) * 0.5 * height
+    );
+    return { cx, cy, radius };
+  }
+
+  _isGlobeHit(clientX, clientY) {
+    if (
+      clientX < 0 ||
+      clientY < 0 ||
+      clientX > window.innerWidth ||
+      clientY > window.innerHeight
+    ) {
+      return false;
+    }
+    const circle = this._globeScreenCircle();
+    if (!circle || !Number.isFinite(circle.radius) || circle.radius <= 0) return false;
+    return Math.hypot(clientX - circle.cx, clientY - circle.cy) <= circle.radius * 1.04 + 8;
+  }
+
+  _isDragBlocked(target, pointerType) {
+    if (!target || !target.closest) return false;
+    return !!target.closest(pointerType === "touch" ? DRAG_TOUCH_BLOCK : DRAG_UI_BLOCK);
+  }
+
+  _isEggTapBlocked(target) {
+    if (!target || !target.closest) return false;
+    return !!target.closest(DRAG_UI_BLOCK);
+  }
+
+  _eggTapNear(x, y, now) {
+    if (this.egg.count <= 0 || this.egg.exploding) return false;
+    const lastActivity = Math.max(this.egg.lastClickAt, this._dragReleaseT || 0);
+    if (now - lastActivity > EGG_CLICK_WINDOW) return false;
+    return Math.hypot(x - this.egg.originX, y - this.egg.originY) <= EGG_CLICK_RADIUS;
+  }
+
+  _eggScaleFor(level) {
+    const fill0 = Math.max(0.05, this.egg.fill0);
+    const targetFill = Math.max(fill0 * 1.25, EGG_FILL_TARGET);
+    const fill = fill0 + (targetFill - fill0) * (level / EGG_CLICKS);
+    return Math.max(1, fill / fill0);
+  }
+
+  _handleEggTap(x, y) {
+    if (this.egg.exploding || this.egg.locked) return;
+    if (this.egg.count >= EGG_CLICKS) return;
+
+    const now = performance.now();
+    if (this.egg.count > 0) {
+      const lastActivity = Math.max(this.egg.lastClickAt, this._dragReleaseT || 0);
+      const inTime = now - lastActivity <= EGG_CLICK_WINDOW;
+      const inPlace =
+        Math.hypot(x - this.egg.originX, y - this.egg.originY) <= EGG_CLICK_RADIUS;
+      if (!inTime || !inPlace) {
+        this._resetEggSequence();
+        return;
+      }
+    } else if (this.egg.active) {
+      // Still shrinking back from the previous attempt.
+      return;
+    }
+
+    if (this.egg.count === 0) {
+      const circle = this._globeScreenCircle();
+      const fill0 = circle ? circle.radius / (window.innerHeight * 0.5) : 0.35;
+      this.egg.fill0 = clamp(fill0, 0.12, 1.2);
+      this.egg.baseCamZ = this.camZ;
+      // Keep the exact orientation the user dragged the globe to. The
+      // temporary drag offset is folded into the frozen base rather than
+      // being discarded, otherwise the first click snaps to the scene view.
+      this.yaw += this.dragYaw;
+      this.tiltX += this.dragPitch;
+      this.egg.baseYaw = this.yaw;
+      this.egg.baseTilt = this.tiltX;
+      this.egg.baseSpinOffset = this.spinOffset;
+      this.egg.originX = x;
+      this.egg.originY = y;
+      this.egg.scale = 1;
+      this.egg.targetScale = 1;
+      this.egg.active = true;
+      this.egg.resetting = false;
+      this.egg.restoring = false;
+      this.egg.explodeAt = 0;
+      this.dragYaw = 0;
+      this.dragPitch = 0;
+      this._dragVelYaw = 0;
+      this._dragVelPitch = 0;
+      this._dragReturn = false;
+      this._dragReleaseT = 0;
+    }
+
+    this.egg.count += 1;
+    this.egg.lastClickAt = now;
+    this.egg.targetScale = this._eggScaleFor(this.egg.count);
+    if (this.egg.count >= EGG_CLICKS) {
+      this.egg.explodeAt = now + EGG_EXPLODE_DELAY;
+    }
+  }
+
+  _resetEggSequence() {
+    if (this.egg.exploding || this.egg.locked) return;
+    if (this.egg.count === 0 || this.egg.count >= EGG_CLICKS) return;
+    this.egg.count = 0;
+    this.egg.lastClickAt = 0;
+    this.egg.targetScale = 1;
+    this.egg.resetting = true;
+  }
+
+  _updateEgg(dt) {
+    if (!this.earthGroup) return;
+    const egg = this.egg;
+    if (!egg.active) {
+      if (Math.abs(this.earthGroup.scale.x - 1) > 1e-4) {
+        this.earthGroup.scale.setScalar(1);
+      }
+      return;
+    }
+
+    const now = performance.now();
+    if (!egg.exploding) {
+      if (
+        !this.dragActive &&
+        egg.count > 0 &&
+        egg.count < EGG_CLICKS &&
+        now - Math.max(egg.lastClickAt, this._dragReleaseT || 0) > EGG_CLICK_WINDOW
+      ) {
+        this._resetEggSequence();
+      }
+      if (egg.count >= EGG_CLICKS && now >= egg.explodeAt) {
+        this._startEggEruption();
+      }
+    }
+
+    if (!egg.exploding || egg.restoring) {
+      const lambda = egg.resetting || egg.restoring ? 5.0 : 7.0;
+      egg.scale = damp(egg.scale, egg.targetScale, lambda, dt);
+    }
+
+    if (egg.resetting && Math.abs(egg.scale - 1) < 0.004) {
+      egg.scale = 1;
+      egg.resetting = false;
+      egg.active = false;
+      egg.count = 0;
+    }
+
+    this.earthGroup.scale.setScalar(egg.scale);
+  }
+
+  _startEggEruption() {
+    if (this.egg.exploding) return;
+    this.egg.exploding = true;
+    this.egg.locked = true;
+    this.egg.restoring = false;
+    this._setGlobeHover(false);
+
+    const circle = this._globeScreenCircle();
+    const x = circle ? circle.cx : window.innerWidth * 0.5;
+    const y = circle ? circle.cy : window.innerHeight * 0.5;
+    const radius = circle
+      ? circle.radius
+      : Math.min(window.innerWidth, window.innerHeight) * 0.3;
+
+    if (!this.eruption) this.eruption = new EruptionFX();
+    this.eruption.start({
+      x,
+      y,
+      radius,
+      onBurst: () => {
+        if (this.earthGroup) this.earthGroup.visible = false;
+      },
+      onFade: () => {
+        if (!this.earthGroup) return;
+        this.earthGroup.visible = true;
+        this.egg.restoring = true;
+        this.egg.targetScale = 1;
+      },
+      onDone: () => this._finishEggEruption(),
+    });
+
+    // Safety net: never leave the planet hidden if the FX loop stalls.
+    window.clearTimeout(this._eggSafety);
+    this._eggSafety = window.setTimeout(() => {
+      if (!this.egg.locked) return;
+      if (this.eruption) this.eruption._stop(false);
+      this._finishEggEruption();
+    }, 12000);
+  }
+
+  _finishEggEruption() {
+    window.clearTimeout(this._eggSafety);
+    this._eggSafety = null;
+    this.egg.active = false;
+    this.egg.exploding = false;
+    this.egg.locked = false;
+    this.egg.restoring = false;
+    this.egg.resetting = false;
+    this.egg.count = 0;
+    this.egg.lastClickAt = 0;
+    this.egg.scale = 1;
+    this.egg.targetScale = 1;
+    this.egg.explodeAt = 0;
+    this._tapCandidate = false;
+    this._tapPointerId = null;
+    if (this.earthGroup) {
+      this.earthGroup.visible = true;
+      this.earthGroup.scale.setScalar(1);
+    }
+  }
+
+  _eggGlowFactor() {
+    if (!this.egg.active) return 1;
+    return 1 / (1 + Math.max(0, this.egg.scale - 1) * 0.4);
+  }
+
+  _setGlobeHover(on) {
+    if (!document.body || this._globeHover === on) return;
+    this._globeHover = on;
+    document.body.classList.toggle("globe-hover", on);
+  }
+
+  _updateGlobeHover(event) {
+    if (this._dragCandidate || this.dragActive) return;
+    if (
+      this.egg.locked ||
+      this.egg.exploding ||
+      (this.egg.active && this.egg.count >= EGG_CLICKS)
+    ) {
+      this._setGlobeHover(false);
+      return;
+    }
+    const hit =
+      this._isGlobeHit(event.clientX, event.clientY) &&
+      !this._isDragBlocked(event.target, event.pointerType);
+    this._setGlobeHover(hit);
+  }
+
+  _dragBy(dx, dy, dt) {
+    const yawDelta = dx * DRAG_YAW_PER_PX;
+    const pitchDelta = dy * DRAG_PITCH_PER_PX;
+    this.dragYaw += yawDelta;
+    this.dragPitch = clamp(this.dragPitch + pitchDelta, -DRAG_PITCH_LIMIT, DRAG_PITCH_LIMIT);
+    if (!this.reducedMotion) {
+      this._dragVelYaw = yawDelta / dt;
+      this._dragVelPitch = pitchDelta / dt;
+    }
+    this._dragReleaseT = 0;
+    this._dragReturn = false;
+  }
+
+  _cancelGlobeDrag() {
+    this._dragCandidate = false;
+    this._dragPointerId = null;
+    this._dragVelYaw = 0;
+    this._dragVelPitch = 0;
+    this._dragReleaseT = performance.now();
+    this.dragActive = false;
+    if (document.body) document.body.classList.remove("globe-dragging");
+    this._setGlobeHover(false);
+  }
+
+  _updateDrag(dt) {
+    if (this.dragActive) return;
+
+    if (this._dragReturn) {
+      this.dragYaw = damp(this.dragYaw, 0, DRAG_RETURN_LAMBDA, dt);
+      this.dragPitch = damp(this.dragPitch, 0, DRAG_RETURN_LAMBDA, dt);
+      if (Math.abs(this.dragYaw) < 0.001 && Math.abs(this.dragPitch) < 0.001) {
+        this.dragYaw = 0;
+        this.dragPitch = 0;
+        this._dragReleaseT = 0;
+        this._dragReturn = false;
+      }
+      return;
+    }
+
+    if (this.reducedMotion) {
+      this._dragVelYaw = 0;
+      this._dragVelPitch = 0;
+    } else if (
+      Math.abs(this._dragVelYaw) > 0.005 ||
+      Math.abs(this._dragVelPitch) > 0.005
+    ) {
+      this.dragYaw += this._dragVelYaw * dt;
+      this.dragPitch = clamp(
+        this.dragPitch + this._dragVelPitch * dt,
+        -DRAG_PITCH_LIMIT,
+        DRAG_PITCH_LIMIT
+      );
+      const friction = Math.exp(-5.5 * dt);
+      this._dragVelYaw *= friction;
+      this._dragVelPitch *= friction;
+    } else {
+      this._dragVelYaw = 0;
+      this._dragVelPitch = 0;
+    }
+
+    if (!this._dragReleaseT) this._dragReleaseT = performance.now();
+    const idle = (performance.now() - this._dragReleaseT) / 1000;
+    if (
+      idle >= DRAG_RETURN_DELAY &&
+      (Math.abs(this.dragYaw) > 0.001 || Math.abs(this.dragPitch) > 0.001)
+    ) {
+      // Return to the scroll-driven view by the shortest path.
+      this.dragYaw -= Math.round(this.dragYaw / TAU) * TAU;
+      this._dragVelYaw = 0;
+      this._dragVelPitch = 0;
+      this._dragReturn = true;
+    }
   }
 
   snapTo(state) {
@@ -1205,6 +1832,12 @@ export class World {
     this.yaw = target.yaw;
     this.tiltX = target.tilt;
     this.spinOffset = state.scrollY * 0.00032;
+    this.dragYaw = 0;
+    this.dragPitch = 0;
+    this._dragVelYaw = 0;
+    this._dragVelPitch = 0;
+    this._dragReleaseT = 0;
+    this._dragReturn = false;
     this.earthGroup.position.set(target.x, target.y, 0);
     this.spin.rotation.y = target.yaw + this.spinOffset;
     this.tilt.rotation.x = target.tilt;

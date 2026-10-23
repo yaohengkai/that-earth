@@ -69,7 +69,7 @@ export const EN_TEXT = {
   "初级生产力": "Primary production",
   "气溶胶光学厚度": "Aerosol optical depth",
   "CO₂ 通量": "CO₂ flux",
-  "粒子点云 · 浓度场壳层": "Particle point cloud · concentration-field shell",
+  "荧光群落 · 浓度等值线壳层": "Bioluminescent colonies · concentration-isopleth shell",
   "滚动以剥离数据层": "Scroll to peel the data layers",
   "让数据，": "Let the data",
   "开始运动。": "begin to move.",

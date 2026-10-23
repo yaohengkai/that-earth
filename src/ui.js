@@ -26,7 +26,7 @@ const PHASE_TEXT = {
   effects: "PHASE 01 / REALITY",
   "phase-2": "PHASE 02 / FORECAST",
   "phase-3": "PHASE 03 / INTELLIGENCE",
-  outro: "PHASE 01 / IN PROGRESS",
+  outro: "CURRENT ORBIT / ∞",
 };
 
 const RAIL_BY_SCENE = {
@@ -39,6 +39,8 @@ const RAIL_BY_SCENE = {
   "phase-3": "phase-3",
   outro: "phase-3",
 };
+
+const AUTOPLAY_RESTART_DELAY = 5000;
 
 const LOAD_MESSAGES = [
   [0.0, "loader.link"],
@@ -59,6 +61,14 @@ function formatCoord(lat, lon) {
 
 function formatNumber(n) {
   return Math.round(n).toLocaleString("en-US");
+}
+
+// Layout position that ignores reveal transforms, so autoplay stops stay
+// stable whether or not an element has already animated in.
+function layoutTop(el) {
+  let top = 0;
+  for (let node = el; node; node = node.offsetParent) top += node.offsetTop || 0;
+  return top;
 }
 
 export class Experience {
@@ -108,6 +118,7 @@ export class Experience {
     this._ended = false;
     this._autoRaf = null;
     this._autoTimer = null;
+    this._restartTimer = null;
     this._autoScrolling = false;
     this._ignoreScrollUntil = 0;
     this._userInteracted = false;
@@ -207,6 +218,7 @@ export class Experience {
     const onUserScroll = (event) => {
       if (isAutoplayControl(event)) return;
       this._userInteracted = true;
+      this._cancelRestart();
       if (this._playing) this.pauseAutoplay();
     };
 
@@ -219,6 +231,7 @@ export class Experience {
         if (isAutoplayControl(event)) return;
         if (["PageDown", "PageUp", "Home", "End", "ArrowDown", "ArrowUp", " "].includes(event.key)) {
           this._userInteracted = true;
+          this._cancelRestart();
           if (this._playing) this.pauseAutoplay();
         }
       },
@@ -227,7 +240,11 @@ export class Experience {
     window.addEventListener(
       "scroll",
       () => {
-        if (!this._playing || this._autoScrolling) return;
+        if (!this._playing) {
+          this._cancelRestart();
+          return;
+        }
+        if (this._autoScrolling) return;
         if (performance.now() < this._ignoreScrollUntil) return;
         this.pauseAutoplay();
       },
@@ -242,6 +259,7 @@ export class Experience {
         if (!target) return;
         event.preventDefault();
         this._userInteracted = true;
+        this._cancelRestart();
         if (this._playing) this.pauseAutoplay();
         const top = target.getBoundingClientRect().top + window.scrollY;
         window.scrollTo({ top: Math.max(0, top - 24), behavior: this.reducedMotion ? "auto" : "smooth" });
@@ -382,18 +400,47 @@ export class Experience {
     const vh = window.innerHeight;
     const max = Math.max(0, document.documentElement.scrollHeight - vh);
     const find = (scene) => this.sections.find((section) => section.scene === scene);
+    const rootStyles = getComputedStyle(document.documentElement);
+    const headerH = Number.parseFloat(rootStyles.getPropertyValue("--header-h")) || 86;
+    // Labels should sit clear of the fixed header once it collapses to 66px.
+    const safeTop = headerH + clamp(vh * 0.03, 16, 30);
     const stops = [];
+    const push = (y, hold, label) => {
+      const value = clamp(y, 0, max);
+      if (stops.length && Math.abs(value - stops[stops.length - 1].y) < 36) return;
+      stops.push({ y: value, hold, label });
+    };
+    // Numeric offsets are only used where a specific scene position (rather
+    // than a label) is the point of the stop.
     const add = (scene, offset, hold, label) => {
       const section = find(scene);
       if (!section) return;
-      const y = clamp(section.top + offset, 0, max);
-      if (stops.length && Math.abs(y - stops[stops.length - 1].y) < 36) return;
-      stops.push({ y, hold, label });
+      push(section.top + offset, hold, label);
+    };
+    // Anchor a stop to an element so the heading/label lands just below the
+    // header instead of sliding underneath it.
+    const addAt = (scene, selector, hold, label) => {
+      const section = find(scene);
+      const el = section && section.el.querySelector(selector);
+      if (!el) return;
+      push(layoutTop(el) - safeTop, hold, label);
+    };
+    // Like addAt, but fall back to a shorter inner element when the whole
+    // block cannot fit in the viewport (e.g. stacked mobile layout).
+    const addBlock = (scene, selector, hold, label, fitSelector) => {
+      const section = find(scene);
+      if (!section) return;
+      let el = section.el.querySelector(selector);
+      if (!el) return;
+      if (fitSelector && el.offsetHeight > vh - safeTop - 24) {
+        el = section.el.querySelector(fitSelector) || el;
+      }
+      push(layoutTop(el) - safeTop, hold, label);
     };
 
     add("hero", 0, 2400, "ORBIT");
-    add("manifesto", 110, 3200, "MANIFESTO");
-    add("phase-1", 180, 3000, "PHASE 01");
+    addAt("manifesto", ".eyebrow", 3200, "MANIFESTO");
+    addAt("phase-1", ".phase-kicker", 3000, "PHASE 01");
 
     const variables = find("variables");
     if (variables) {
@@ -403,17 +450,18 @@ export class Experience {
       });
     }
 
-    add("effects", 260, 3600, "MOTION");
-    add("phase-2", 100, 3000, "PHASE 02");
-    add("phase-2", 600, 3200, "FORECAST");
-    add("phase-3", 100, 3000, "PHASE 03");
-    add("phase-3", 760, 3600, "TWIN");
-    add("outro", 320, 5600, "OUTRO / CASES");
+    addAt("effects", ".effects-head .eyebrow", 3600, "MOTION");
+    addAt("phase-2", ".phase-kicker", 3000, "PHASE 02");
+    addAt("phase-2", ".p2-capabilities", 3200, "FORECAST");
+    addAt("phase-3", ".phase-kicker", 3000, "PHASE 03");
+    addBlock("phase-3", ".p3-lower", 3600, "TWIN", ".terminal-card");
+    addAt("outro", ".eyebrow", 5600, "OUTRO / CASES");
 
     return stops;
   }
 
   startAutoplay() {
+    this._cancelRestart();
     if (this._playing) return;
     this._stops = this.buildAutoStops();
     if (!this._stops.length) return;
@@ -459,6 +507,21 @@ export class Experience {
     this._cancelAuto();
     document.documentElement.style.scrollBehavior = "";
     this.updateAutoplayButton();
+    this._scheduleRestart();
+  }
+
+  _scheduleRestart() {
+    window.clearTimeout(this._restartTimer);
+    this._restartTimer = window.setTimeout(() => {
+      this._restartTimer = null;
+      if (!this._ended || this._playing) return;
+      this.startAutoplay();
+    }, AUTOPLAY_RESTART_DELAY);
+  }
+
+  _cancelRestart() {
+    window.clearTimeout(this._restartTimer);
+    this._restartTimer = null;
   }
 
   updateAutoplayButton() {
@@ -486,6 +549,7 @@ export class Experience {
     this._autoRaf = null;
     window.clearTimeout(this._autoTimer);
     this._autoTimer = null;
+    this._cancelRestart();
     this._autoScrolling = false;
   }
 
@@ -513,7 +577,7 @@ export class Experience {
     if (Math.abs(delta) < 2 || duration <= 0) {
       window.scrollTo(0, target);
       this._autoScrolling = false;
-      this._ignoreScrollUntil = performance.now() + 260;
+      this._ignoreScrollUntil = performance.now() + 800;
       done();
       return;
     }
@@ -531,7 +595,7 @@ export class Experience {
         this._autoRaf = requestAnimationFrame(step);
       } else {
         this._autoScrolling = false;
-        this._ignoreScrollUntil = performance.now() + 260;
+        this._ignoreScrollUntil = performance.now() + 800;
         done();
       }
     };

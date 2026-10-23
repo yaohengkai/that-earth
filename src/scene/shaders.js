@@ -385,6 +385,7 @@ export const layerFragment = /* glsl */ `
   uniform vec3 uColorB;
   uniform vec3 uPeelDir;
   uniform float uLightTheme;
+  uniform sampler2D uDay;
 
   varying vec2 vUv;
   varying vec3 vLocal;
@@ -439,16 +440,60 @@ export const layerFragment = /* glsl */ `
       lines = clamp(contour * 0.85 + contour2 * 0.6 + grid * 0.5, 0.0, 1.0);
       col = mix(uColorA, uColorB, contour * 0.5 + grid * 0.2);
     } else {
-      /* biosphere — glowing cells and chlorophyll fields */
-      vec2 cells = vUv * vec2(96.0, 48.0);
-      vec2 gv = fract(cells) - 0.5;
-      float rnd = hash21(floor(cells));
-      float dotMask = smoothstep(0.14, 0.0, length(gv));
-      float twinkle = 0.45 + 0.55 * sin(t * 1.4 + rnd * 6.28318);
-      float patches = smoothstep(0.4, 0.9, fbm(vec3(vUv * vec2(6.0, 3.0), 2.0)));
-      pattern = 0.018 + dotMask * step(0.8, rnd) * twinkle * 0.5 + patches * 0.07;
-      lines = clamp(dotMask * step(0.8, rnd) * (0.45 + twinkle * 0.55) + patches * 0.04, 0.0, 1.0);
-      col = mix(uColorA, uColorB, dotMask * twinkle * 0.55 + patches * 0.15);
+      /* biosphere — bioluminescent plankton clustered by concentration */
+      vec3 surface = texture2D(uDay, vUv).rgb;
+      // Bias the colonies toward ocean and vegetated land instead of deserts.
+      float ocean = smoothstep(0.0, 0.16, surface.b - surface.r);
+      float vegetation = smoothstep(0.0, 0.12, surface.g - surface.r);
+      float habitat = clamp(0.38 + ocean * 0.52 + vegetation * 0.42, 0.0, 1.0);
+
+      vec3 sp = vLocal;
+      float drift = t * 0.03;
+
+      // Seamless concentration field: broad chlorophyll blooms with finer
+      // texture, slowly drifting so the layer feels alive.
+      float field = fbm(sp * 2.35 + vec3(drift * 0.5, -drift * 0.35, drift * 0.25));
+      float detail = snoise(sp * 8.5 - vec3(drift * 1.4, drift * 0.6, 0.0));
+      float conc = clamp(0.5 + field * 0.42 + detail * 0.1, 0.0, 1.0);
+      float bloom = smoothstep(0.48, 0.8, conc);
+      float haze = smoothstep(0.36, 0.8, conc);
+      float density = smoothstep(0.3, 0.85, conc) * (0.38 + habitat * 0.62);
+      // Isopleths make the concentration field legible as a data layer.
+      float isobands = abs(fract(conc * 5.0 + t * 0.012 + 0.5) - 0.5);
+      float isopleth = (1.0 - smoothstep(0.0, 0.055, isobands)) * (0.3 + haze * 0.7) * (0.38 + habitat * 0.62);
+
+      // Colonies are warped rather than gridded: they clump around the
+      // concentration peaks and get larger/brighter where life is dense.
+      vec2 warp = vec2(
+        snoise(vec3(vUv * 5.0, t * 0.05)),
+        snoise(vec3(vUv * 5.0 + 17.0, t * 0.05))
+      );
+      vec2 colonies = vUv * vec2(96.0, 48.0) + warp * 1.6;
+      vec2 cell = floor(colonies);
+      vec2 gv = fract(colonies) - 0.5;
+      float rnd = hash21(cell);
+      float seed = hash21(cell + 4.7);
+      // More cells light up where the concentration is high, so the field
+      // reads as clustered life rather than an even starfield.
+      float colonyActive = step(1.0 - (0.1 + 0.65 * density), rnd);
+      float radius = (0.06 + 0.17 * seed) * (0.8 + bloom * 0.7);
+      float dist = length(gv);
+      float facing = clamp(dot(normalize(vNormalW), normalize(vViewW)), 0.0, 1.0);
+      float limbFade = smoothstep(0.03, 0.32, facing);
+      float core = (1.0 - smoothstep(radius * 0.12, radius, dist)) * colonyActive;
+      float glow = (1.0 - smoothstep(0.0, radius * 3.2, dist)) * colonyActive;
+      float phase = seed * 6.28318;
+
+      // Slow breathing plus an expanding pulse ring around dense colonies.
+      float pulse = 0.55 + 0.45 * sin(t * 1.35 + phase + conc * 8.0);
+      float ringR = 0.12 + 0.24 * (0.5 + 0.5 * sin(t * 0.9 + phase));
+      float ring = (1.0 - smoothstep(0.0, 0.03, abs(dist - ringR))) * colonyActive * bloom;
+
+      pattern = 0.012 + haze * 0.07 + bloom * 0.16 + isopleth * 0.34
+        + (glow * pulse * 0.32 + core * pulse * 0.66 + ring * 0.08) * limbFade;
+      lines = clamp(haze * 0.14 + bloom * 0.55 + isopleth * 0.8
+        + (glow * pulse * 0.55 + core * pulse * 1.1 + ring * 0.4) * limbFade, 0.0, 1.0);
+      col = mix(uColorA, uColorB, clamp(core * pulse * 0.9 + glow * 0.35 + ring * 0.4 + bloom * 0.32 + isopleth * 0.55, 0.0, 1.0));
     }
 
     /* peel mask — a ragged sheet lifting away from the planet */

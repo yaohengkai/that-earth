@@ -167,7 +167,9 @@ function startLoop() {
 }
 
 function tick(now) {
-  const dt = Math.min(0.05, (now - lastTime) / 1000);
+  // rAF timestamps can precede the performance.now() captured in
+  // startLoop(), so clamp dt to a non-negative value.
+  const dt = Math.min(0.05, Math.max(0, (now - lastTime) / 1000));
   lastTime = now;
 
   if (!document.hidden && world && experience) {
