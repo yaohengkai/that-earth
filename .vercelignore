@@ -1,0 +1,15 @@
+# Dependencies and build output are produced on Vercel.
+node_modules
+dist
+.pnpm-store
+.vercel
+
+# Local-only screenshots. Do not use *.jpg here: public/textures/*.jpg
+# must still be uploaded so the Three.js scene can load its textures.
+/preview.jpg
+/preview-light.jpg
+/preview-en.jpg
+/cases-preview.jpg
+
+.DS_Store
+*.local

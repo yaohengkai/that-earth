@@ -16,6 +16,8 @@
 
 ## 本地运行
 
+需要 Node.js 22 与 pnpm 10（版本见 `.nvmrc` / `package.json`）。
+
 ```bash
 pnpm install
 pnpm dev
@@ -30,7 +32,39 @@ pnpm build
 pnpm preview
 ```
 
-构建产物位于 `dist/`，可直接部署到 Vercel、Netlify、Cloudflare Pages 或任意静态服务器。
+构建产物位于 `dist/`。仓库已内置 Vercel 配置，可直接部署；也适用于 Netlify、Cloudflare Pages 或任意静态服务器。
+
+## 部署到 Vercel
+
+仓库根目录已包含 Vercel 所需配置：
+
+| 文件 | 作用 |
+| --- | --- |
+| `vercel.json` | 指定 Vite 框架、安装 / 构建命令、输出目录、`www.that.earth` → `that.earth` 跳转、静态资源缓存与基础安全响应头 |
+| `.vercelignore` | 排除本地截图、`node_modules` 与 `dist`，避免把构建产物和预览图上传到构建环境 |
+| `.nvmrc` | 本地版本管理使用 Node.js 22；Vercel 通过 `engines.node` 固定为 22.x |
+| `package.json` | `engines.node: 22.x`、`packageManager: pnpm@10.27.0`，保证 Vercel 使用一致的运行时与包管理器 |
+
+### 通过 Git 导入（推荐）
+
+1. 在 [Vercel New Project](https://vercel.com/new) 导入 `yaohengkai/that-earth`。
+2. Framework Preset 选择 **Vite**；若表单未自动填充，使用：
+   - Install Command：`pnpm install --frozen-lockfile`
+   - Build Command：`pnpm build`
+   - Output Directory：`dist`
+3. 点击 Deploy。项目不需要环境变量。
+4. 在 **Settings → Domains** 添加 `that.earth` 与 `www.that.earth`，将 `that.earth` 设为 **Primary Domain**，按 Vercel 提示修改 DNS。`vercel.json` 会把 `www` 永久跳转到 `that.earth`。
+
+### 通过 CLI 部署
+
+```bash
+pnpm dlx vercel          # 预览部署
+pnpm dlx vercel --prod   # 生产部署
+```
+
+首次执行会要求登录并关联 / 创建 Vercel 项目；生成的 `.vercel/` 已加入 `.gitignore`，不要提交。
+
+> 页面内的 canonical、Open Graph、`robots.txt` 与 `sitemap.xml` 均指向 `https://that.earth/`。如果暂时使用 `*.vercel.app` 域名预览，这些绝对地址仍会指向正式域名；正式上线前请确认 `that.earth` 已绑定到 Vercel。
 
 ## 页面结构
 
@@ -93,4 +127,4 @@ pnpm preview
 - 联系邮箱目前为占位地址 `hello@that.earth`（`index.html` 中 `mailto:` 链接）。
 - 底部四张参考项目卡片与源码链接集中在 `index.html` 的 `.subdomains` / `.case-repos` 中；若子域名或仓库地址调整，在这里同步替换。
 - `og.jpg` 为社交分享预览图，可按最终视觉替换。
-- 域名 DNS / 托管配置不在代码仓库内；将 `dist/` 部署后，把 `that.earth` 的 A/CNAME 记录指向托管服务即可。
+- 域名 DNS 在 Vercel 项目的 **Settings → Domains** 中配置；将 `that.earth` 与 `www.that.earth` 指向 Vercel 后即可生效。

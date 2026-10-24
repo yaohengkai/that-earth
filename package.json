@@ -5,6 +5,10 @@
   "type": "module",
   "description": "That Earth · 那个地球 — a parallax digital-earth landing page",
   "license": "MIT",
+  "engines": {
+    "node": "22.x"
+  },
+  "packageManager": "pnpm@10.27.0",
   "scripts": {
     "dev": "vite --host 127.0.0.1",
     "build": "vite build",

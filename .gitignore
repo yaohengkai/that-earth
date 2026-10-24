@@ -1,4 +1,6 @@
 node_modules/
 dist/
+.vercel/
+.pnpm-store/
 .DS_Store
 *.local
