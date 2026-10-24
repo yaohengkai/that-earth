@@ -40,7 +40,7 @@ pnpm preview
 
 | 文件 | 作用 |
 | --- | --- |
-| `vercel.json` | 指定 Vite 框架、安装 / 构建命令、输出目录、`www.that.earth` → `that.earth` 跳转、静态资源缓存与基础安全响应头 |
+| `vercel.json` | 指定 Vite 框架、安装 / 构建命令、输出目录、静态资源缓存与基础安全响应头 |
 | `.vercelignore` | 排除本地截图、`node_modules` 与 `dist`，避免把构建产物和预览图上传到构建环境 |
 | `.nvmrc` | 本地版本管理使用 Node.js 22；Vercel 通过 `engines.node` 固定为 22.x |
 | `package.json` | `engines.node: 22.x`、`packageManager: pnpm@10.27.0`，保证 Vercel 使用一致的运行时与包管理器 |
@@ -53,7 +53,9 @@ pnpm preview
    - Build Command：`pnpm build`
    - Output Directory：`dist`
 3. 点击 Deploy。项目不需要环境变量。
-4. 在 **Settings → Domains** 添加 `that.earth` 与 `www.that.earth`，将 `that.earth` 设为 **Primary Domain**，按 Vercel 提示修改 DNS。`vercel.json` 会把 `www` 永久跳转到 `that.earth`。
+4. 在 **Settings → Domains** 添加 `that.earth` 与 `www.that.earth`，并把希望对外使用的域名设为 **Primary Domain**。页面 canonical 指向 `https://that.earth/`，因此建议将 `that.earth` 设为主域名；Vercel 会自动把另一个域名 308 跳转到 Primary Domain。
+
+> **不要再在 `vercel.json` 里写 `www → apex` 或 `apex → www` 的 host 重定向。** Vercel 已经按 Primary Domain 自动处理域名跳转；如果仓库里的重定向方向与 Vercel 的主域名跳转相反，会形成 308 循环——HTML 能打开，但所有 `/assets/*`、`/textures/*`、`/fonts/*` 都会加载失败。
 
 ### 通过 CLI 部署
 
@@ -64,7 +66,7 @@ pnpm dlx vercel --prod   # 生产部署
 
 首次执行会要求登录并关联 / 创建 Vercel 项目；生成的 `.vercel/` 已加入 `.gitignore`，不要提交。
 
-> 页面内的 canonical、Open Graph、`robots.txt` 与 `sitemap.xml` 均指向 `https://that.earth/`。如果暂时使用 `*.vercel.app` 域名预览，这些绝对地址仍会指向正式域名；正式上线前请确认 `that.earth` 已绑定到 Vercel。
+> 页面内的 canonical、Open Graph、`robots.txt` 与 `sitemap.xml` 均指向 `https://that.earth/`。域名规范化由 Vercel 的 Primary Domain 设置负责；建议把 `that.earth` 设为主域名。如果改用 `www.that.earth` 作为主域名，需要同步修改这些绝对地址。暂时使用 `*.vercel.app` 域名预览时，这些地址仍会指向正式域名。
 
 ## 页面结构
 
